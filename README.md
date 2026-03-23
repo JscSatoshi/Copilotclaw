@@ -17,7 +17,7 @@
 3. 打开 OpenClaw UI，输入配对令牌完成绑定
 
 ```bash
-git clone <repo-url> && cd Copilotclaw
+git clone https://github.com/JscSatoshi/Copilotclaw && cd Copilotclaw
 python3 deploy.py        # 首次部署（自动 OAuth 授权 + 构建镜像 + 启动）
 ```
 
@@ -71,6 +71,7 @@ Agent 通过 **Skill**（注入系统提示的 Markdown）学会调用 `http://s
 ├── docker-compose.yml               # 容器编排（3 服务）
 ├── Dockerfile.openclaw              # OpenClaw 镜像（node:22-bookworm-slim）
 ├── .env                             # 密钥（自动生成，勿提交至 git）
+├── .env.example                     # 密钥模板（变量名说明）
 ├── openclaw/
 │   ├── openclaw.json                # OpenClaw 配置（端口/模型/Skills）
 │   ├── skills/
