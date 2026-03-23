@@ -304,9 +304,39 @@ def sync_gateway_token_to_config(project_dir: Path, token: str) -> None:
         warn(f"无法同步 openclaw.json: {exc}")
 
 
+def _read_gateway_token_from_config(project_dir: Path) -> Optional[str]:
+    """从 openclaw/openclaw.json 读取 gateway.auth.token。"""
+    config_file = project_dir / "openclaw" / "openclaw.json"
+    if not config_file.exists():
+        return None
+    try:
+        config = json.loads(config_file.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    token = (
+        config.get("gateway", {})
+        .get("auth", {})
+        .get("token")
+    )
+    if isinstance(token, str) and token.strip():
+        return token.strip()
+    return None
+
+
 def ensure_gateway_token(project_dir: Path) -> str:
-    """确保网关令牌存在，缺失则自动生成。返回令牌值。"""
-    token = _ensure_env_secret(project_dir, "OPENCLAW_GATEWAY_TOKEN", "网关通信 Token")
+    """确保网关令牌存在且写入 .env，优先使用 openclaw.json 中的 token。"""
+    env_token = _read_env_var(project_dir, "OPENCLAW_GATEWAY_TOKEN")
+    cfg_token = _read_gateway_token_from_config(project_dir)
+
+    if cfg_token:
+        token = cfg_token
+        if env_token != cfg_token:
+            _write_env_var(project_dir, "OPENCLAW_GATEWAY_TOKEN", cfg_token, "网关通信 Token")
+            ok("已将 openclaw.json 的网关令牌写入 .env")
+    else:
+        token = _ensure_env_secret(project_dir, "OPENCLAW_GATEWAY_TOKEN", "网关通信 Token")
+
     if len(token) < 12:
         warn("OPENCLAW_GATEWAY_TOKEN 太短，建议使用更长的随机值。")
     return token

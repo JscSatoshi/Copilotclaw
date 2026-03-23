@@ -5,7 +5,7 @@
     "mode": "local",
     "auth": {
       "mode": "token",
-      "token": "HekyZrhFx9qOXdtKgjw4BW6zif2WidbZdNHwAjv-hsg"
+      "token": "xxxxxxxx"
     },
     "controlUi": {
       "allowInsecureAuth": true,
