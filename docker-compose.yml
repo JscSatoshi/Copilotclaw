@@ -16,20 +16,20 @@ services:
     user: root
     entrypoint: >
       sh -c '
-        mkdir -p /home/node/.openclaw/canvas /home/node/.openclaw/cron /home/node/.openclaw/devices /home/node/.openclaw/agents /home/node/.openclaw/media/browser &&
+        mkdir -p /root/.openclaw/canvas /root/.openclaw/cron /root/.openclaw/devices /root/.openclaw/agents /root/.openclaw/media/browser &&
         mkdir -p /data/workspace/skills /data/workspace/memory &&
-        cp /tmp/openclaw.json.src /home/node/.openclaw/openclaw.json &&
-        rm -f /home/node/.openclaw/agents/main/agent/models.json &&
+        cp /tmp/openclaw.json.src /root/.openclaw/openclaw.json &&
+        rm -f /root/.openclaw/agents/main/agent/models.json &&
         socat TCP-LISTEN:18788,reuseaddr,fork TCP:127.0.0.1:18789 &
-        exec openclaw gateway --token "$OPENCLAW_GATEWAY_TOKEN"
+        exec openclaw gateway --allow-unconfigured --token "$OPENCLAW_GATEWAY_TOKEN"
       '
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - openclaw-home:/home/node/.openclaw
+      - openclaw-home:/root/.openclaw
       - openclaw-data:/data
       - ./openclaw/openclaw.json:/tmp/openclaw.json.src:ro
       - ./openclaw/skills/web/SKILL.md:/data/workspace/skills/web/SKILL.md:ro
-      - screenshot-media:/home/node/.openclaw/media/browser
+      - screenshot-media:/root/.openclaw/media/browser
     depends_on:
       skillserver:
         condition: service_started
