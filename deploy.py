@@ -591,7 +591,6 @@ def start_services(project_dir: Path, *, auto_pair: bool = True,
     """
     # 准备令牌与密钥
     gateway_token = ensure_gateway_token(project_dir)
-    sync_gateway_token_to_config(project_dir, gateway_token)
     _ensure_env_secret(project_dir, "SEARXNG_SECRET", "SearXNG 加密密钥")
     _ensure_env_secret(project_dir, "AUTH_PASSWORD", "OpenClaw UI 登录密码")
 

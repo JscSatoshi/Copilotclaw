@@ -8,13 +8,8 @@ RUN apt-get update && \
       ca-certificates \
       curl \
       git \
-      lsof && \
+      lsof \
+      socat && \
     rm -rf /var/lib/apt/lists/*
 
-ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
-ENV PATH=/home/node/.npm-global/bin:$PATH
-
-USER node
-
-RUN curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard \
-    && chown -R node:node /home/node/.npm-global
+RUN curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard

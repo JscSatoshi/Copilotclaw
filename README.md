@@ -50,8 +50,11 @@ python3 deploy.py --help     # 显示帮助
 ```
 浏览器
   │
+  ▼ :18789 (宿主机)
+socat :18788             ← 容器内 TCP 转发（0.0.0.0:18788 → 127.0.0.1:18789）
+  │
   ▼
-OpenClaw :18789          ← Agent UI + Copilot 模型
+OpenClaw :18789          ← Agent UI + Copilot 模型（loopback 监听）
   │  (容器内 HTTP)
   ▼
 SkillServer :3000        ← FastAPI + Playwright Chromium
@@ -61,6 +64,8 @@ SearXNG :8080            ← 本地搜索引擎（不对外暴露）
 ```
 
 三个容器通过 `ai-bridge` Docker 内网通信，仅 OpenClaw 端口对外暴露。
+
+OpenClaw gateway 只监听容器内 `127.0.0.1:18789`（loopback），`socat` 负责将外部流量从 `0.0.0.0:18788` 转发进来，Docker 再将宿主机 `18789` 映射到容器 `18788`。
 
 Agent 通过 **Skill**（注入系统提示的 Markdown）学会调用 `http://skillserver:3000/...`，实现网页搜索与浏览器操控。
 
@@ -89,9 +94,12 @@ Agent 通过 **Skill**（注入系统提示的 Markdown）学会调用 `http://s
 
 ### openclaw（端口 18789，对外）
 - 镜像：`openclaw:local`（`node:22-bookworm-slim`，官方安装脚本写入）
+- **运行用户：root**（容器全程以 root 运行，无降权步骤）
 - 模型：`github-copilot/claude-sonnet-4.6`（在 `openclaw.json` 中修改）
 - 内置 web 工具已禁用，改由 Skill + SkillServer 提供搜索/浏览能力
 - `openclaw.json` 采用「暂存 → 复制」挂载方式（挂载到 `/tmp/openclaw.json.src:ro`，启动时复制到 `/home/node/.openclaw/`），确保容器内配置文件可写
+- **Gateway Token** 通过环境变量 `OPENCLAW_GATEWAY_TOKEN` 注入（`--token` 参数），`openclaw.json` 中不存储 token
+- **端口转发**：容器内 `socat` 将 `0.0.0.0:18788` 转发到 gateway 的 `127.0.0.1:18789`，宿主机端口映射为 `18789:18788`
 - 持久化卷：`openclaw-home`（配置/配对信息）、`openclaw-data`（工作区）、`screenshot-media`（截图共享卷，与 SkillServer 共用）
 
 ### skillserver（端口 3000，仅内网）
@@ -133,7 +141,7 @@ Agent 通过 **Skill**（注入系统提示的 Markdown）学会调用 `http://s
 
 **时区**：所有容器默认使用 `Asia/Shanghai` 时区（`TZ` 环境变量 + `/etc/localtime` 挂载），如需修改请编辑 `docker-compose.yml` 中三个服务的 `TZ` 值。
 
-**端口冲突**：`openclaw.json`（监听端口）、`docker-compose.yml`（映射端口）、`deploy.py`（健康检查端口）三处须一致。
+**端口说明**：Gateway 监听 `127.0.0.1:18789`（容器内 loopback），`socat` 转发 `0.0.0.0:18788`，Docker 映射宿主机 `18789` → 容器 `18788`。三处须保持一致：`openclaw.json`（`port: 18789`）、`docker-compose.yml`（`18789:18788`）、`deploy.py`（健康检查 `18789`）。
 
 **修改密码**：编辑 `.env` 中的 `AUTH_PASSWORD`（首次部署自动随机生成），修改后运行 `--start` 重启生效。
 
@@ -142,7 +150,7 @@ Agent 通过 **Skill**（注入系统提示的 Markdown）学会调用 `http://s
 | 变量 | 说明 |
 |------|------|
 | `COPILOT_GITHUB_TOKEN` | GitHub OAuth 令牌（`deploy.py` 自动通过设备流程获取）|
-| `OPENCLAW_GATEWAY_TOKEN` | 网关配对令牌（自动生成，首次打开 OpenClaw UI 时输入）|
+| `OPENCLAW_GATEWAY_TOKEN` | 网关配对令牌（自动生成，首次打开 OpenClaw UI 时输入；通过环境变量注入容器，不写入 `openclaw.json`）|
 | `AUTH_PASSWORD` | OpenClaw UI 登录密码（首次部署自动生成随机值）|
 | `SEARXNG_SECRET` | SearXNG 加密密钥（自动生成）|
 
@@ -165,3 +173,4 @@ Agent 通过 **Skill**（注入系统提示的 Markdown）学会调用 `http://s
 | Agent 不会搜索 | 检查 `--check` 中 SkillServer 连通性；确认 `skills/web/SKILL.md` 已挂载 |
 | SkillServer 启动慢 | Playwright Chromium 首次启动需几秒，属正常现象 |
 | `resource busy or locked, rename openclaw.json` | 确认 `openclaw.json` 未直接以 `:ro` 挂载到目标路径（应挂载到 `/tmp/` 再复制）|
+| SkillServer 或 SearXNG 无法访问 | `--check` 验证容器间通信；`socat` 进程在容器里，重启容器会自动重启 |

@@ -1,16 +1,17 @@
 {
   "gateway": {
     "port": 18789,
-    "bind": "lan",
+    "bind": "loopback",
     "mode": "local",
     "auth": {
-      "mode": "token",
-      "token": "xxxxxxxx"
+      "mode": "token"
     },
     "controlUi": {
       "allowInsecureAuth": true,
       "enabled": true,
-      "allowedOrigins": ["*"]
+      "allowedOrigins": [
+        "*"
+      ]
     }
   },
   "agents": {
