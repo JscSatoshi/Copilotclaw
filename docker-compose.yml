@@ -29,7 +29,7 @@ services:
       - openclaw-home:/root/.openclaw
       - openclaw-data:/data
       - ./openclaw/openclaw.json:/tmp/openclaw.json.src:ro
-      - ./openclaw/skills/web/SKILL.md:/data/workspace/skills/web/SKILL.md:ro
+      - ./openclaw/skills/web/SKILL.md:/data/workspace/skills/web/SKILL.md
       - screenshot-media:/root/.openclaw/media/browser
     depends_on:
       skillserver:
