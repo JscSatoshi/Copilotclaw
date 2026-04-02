@@ -138,7 +138,6 @@ def ensure_docker_running() -> bool:
 
 def copilot_device_flow() -> Optional[str]:
     """执行 GitHub Copilot OAuth Device Flow"""
-    step(3, "GitHub Copilot 授权 (OAuth Device Flow)")
 
     info("正在发起 Device Code 请求...")
     resp = http_json("POST", "https://github.com/login/device/code", {
@@ -410,8 +409,8 @@ def _ensure_device_paired() -> None:
             ok("已有配对设备，跳过等待")
             _print_paired_summary()
             return
-        remaining = int(deadline - time.time())
-        info(f"等待配对中（剩余 {remaining}s）...")
+        remaining = max(0, int(deadline - time.time()))
+        info(f"等待配对中（剩余 {remaining}s）..."))
         time.sleep(5)
 
     if approved_total > 0:
@@ -783,6 +782,7 @@ def full_deploy(project_dir: Path) -> None:
         sys.exit(1)
 
     # 3. Copilot 授权 —— 已有令牌时询问是否复用
+    step(3, "GitHub Copilot 授权")
     token = _resolve_token(project_dir)
 
     # 4. 配置端点
@@ -801,15 +801,16 @@ def full_deploy(project_dir: Path) -> None:
 def refresh_token_only(project_dir: Path) -> None:
     """仅重新获取 Copilot token 并写入 .env，不启动或停止容器。"""
     header("🔐 重新获取 Copilot 令牌")
+    step(1, "GitHub Copilot 授权")
     token = copilot_device_flow()
     if not token:
         fail("无法获取 Copilot 令牌。")
         sys.exit(1)
 
-    step(1, "更新令牌配置")
+    step(2, "更新令牌配置")
     update_compose_token(project_dir, token)
 
-    step(2, "验证令牌")
+    step(3, "验证令牌")
     if _check_copilot_token(project_dir):
         ok("新令牌已生效")
     else:
@@ -893,7 +894,7 @@ def check_health(project_dir: Path) -> bool:
     # 3. Copilot 令牌
     step(3, "Copilot 令牌")
     if not _check_copilot_token(project_dir):
-        return False
+        all_ok = False
 
     # 4. 设备配对
     step(4, "设备配对")
@@ -1007,8 +1008,11 @@ def show_help() -> None:
     {_c('1;32', 'python3 deploy.py --newtoken')} {_c('1', '仅重新获取 GitHub Copilot token')}
         执行 OAuth Device Flow 并更新 .env 中 COPILOT_GITHUB_TOKEN
 
-    {_c('1;32', 'python3 deploy.py --build')}   {_c('1', '重建/补齐镜像')}
-        重建 openclaw 与 skillserver，确保 searxng 镜像存在（缺失自动拉取）
+    {_c('1;32', 'python3 deploy.py --build')}   {_c('1', '构建缺失镜像')}
+        镜像已存在则跳过，确保 searxng 镜像存在（缺失自动拉取）
+
+    {_c('1;32', 'python3 deploy.py --build --force')} {_c('1', '强制重建所有镜像')}
+        无论是否已存在，重建 openclaw 与 skillserver
 
     {_c('1;32', 'python3 deploy.py --check')}   {_c('1', '健康检查 + 自动批准待配对设备')}
         容器 → HTTP → 令牌 → 配对 → 网关 → 模型
@@ -1037,8 +1041,9 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     group.add_argument("--check", action="store_true", help="健康检查 + 自动批准待配对设备")
     group.add_argument("--start", action="store_true", help="启动，重启（令牌已有）")
     group.add_argument("--newtoken", action="store_true", help="仅重新获取 Copilot 令牌并写入 .env")
-    group.add_argument("--build", action="store_true", help="重建 openclaw/skillserver 并确保 searxng 镜像存在")
+    group.add_argument("--build", action="store_true", help="构建缺失镜像（配合 --force 强制重建）")
     group.add_argument("--logs", action="store_true", help="查看所有容器日志（按任意键退出）")
+    parser.add_argument("--force", action="store_true", help="配合 --build 使用，强制重建已有镜像")
     return parser.parse_args(argv)
 
 
@@ -1053,6 +1058,9 @@ def main() -> None:
     project_dir = get_project_dir()
     os.chdir(project_dir)
 
+    if args.force and not args.build:
+        warn("--force 仅在配合 --build 时生效，已忽略")
+
     if args.logs:
         show_logs()
     elif args.stop:
@@ -1061,8 +1069,11 @@ def main() -> None:
         step(1, "检测 Docker 环境")
         if not ensure_docker_running():
             sys.exit(1)
-        if not build_openclaw_image(project_dir):
-            sys.exit(1)
+        if not args.force and _image_exists(OPENCLAW_IMAGE_NAME) and _image_exists(SKILLSERVER_IMAGE_NAME):
+            ok(f"镜像已存在: {OPENCLAW_IMAGE_NAME}, {SKILLSERVER_IMAGE_NAME}（使用 --force 强制重建）")
+        else:
+            if not build_openclaw_image(project_dir):
+                sys.exit(1)
         step(2, "确保 searxng 镜像")
         if not ensure_searxng_image():
             sys.exit(1)

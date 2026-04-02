@@ -10,7 +10,6 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from web_core import WebCore
 
@@ -35,10 +34,6 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 app = FastAPI(title="Web Service", lifespan=lifespan)
-
-# Serve screenshots as static files
-Path(MEDIA_DIR).mkdir(parents=True, exist_ok=True)
-app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 # ---------------------------------------------------------------------------
 # Endpoints
@@ -89,10 +84,10 @@ async def deep_search(
             safe_search=safe_search,
             max_results=max_results,
         )
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=502)
     except asyncio.TimeoutError:
         return JSONResponse({"error": "deep_search timed out"}, status_code=504)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=502)
 
 
 @app.get("/navigate")
@@ -149,7 +144,7 @@ async def screenshot(url: str, full_page: bool = False):
         slug = hashlib.md5(url.encode()).hexdigest()[:8]
         filename = f"screenshot_{ts}_{slug}.png"
         (media / filename).write_bytes(data)
-        media_ref = f"MEDIA:/home/node/.openclaw/media/browser/{filename}"
+        media_ref = f"MEDIA:{MEDIA_DIR}/{filename}"
         return {
             "url": url,
             "format": "png",

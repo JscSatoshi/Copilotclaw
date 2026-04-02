@@ -148,8 +148,9 @@ class WebCore:
             return {"url": url, "error": err}
 
         if format == "html":
-            page = await self._new_text_page()
+            page = None
             try:
+                page = await self._new_text_page()
                 await page.goto(url, wait_until=wait_until, timeout=self.config.page_timeout)
                 html = await page.content()
                 if len(html) > 50000:
@@ -158,11 +159,12 @@ class WebCore:
             except Exception as exc:
                 return {"url": url, "error": str(exc)}
             finally:
-                await page.close()
+                if page:
+                    await page.close()
 
         text = await self._page_text(url, 20000, wait_until)
         if text.startswith("[fetch error:"):
-            return {"url": url, "error": text[13:].strip(" []")}
+            return {"url": url, "error": text[14:-1]}
         return {"url": url, "content": text, "format": "text"}
 
     async def extract_text(
@@ -173,8 +175,9 @@ class WebCore:
     ) -> dict[str, Any]:
         if err := self.validate_url(url):
             return {"url": url, "error": err}
-        page = await self._new_text_page()
+        page = None
         try:
+            page = await self._new_text_page()
             await page.goto(url, wait_until=wait_until, timeout=self.config.page_timeout)
             element = page.locator(selector).first
             text = await element.inner_text(timeout=5000)
@@ -186,13 +189,15 @@ class WebCore:
         except Exception as exc:
             return {"url": url, "selector": selector, "error": str(exc)}
         finally:
-            await page.close()
+            if page:
+                await page.close()
 
     async def extract_links(self, url: str, wait_until: str = "domcontentloaded") -> dict[str, Any]:
         if err := self.validate_url(url):
             return {"url": url, "error": err}
-        page = await self._new_text_page()
+        page = None
         try:
+            page = await self._new_text_page()
             await page.goto(url, wait_until=wait_until, timeout=self.config.page_timeout)
             links = await page.eval_on_selector_all(
                 "a[href]",
@@ -203,13 +208,15 @@ class WebCore:
         except Exception as exc:
             return {"url": url, "error": str(exc)}
         finally:
-            await page.close()
+            if page:
+                await page.close()
 
     async def headlines(self, url: str, wait_until: str = "domcontentloaded") -> dict[str, Any]:
         if err := self.validate_url(url):
             return {"url": url, "error": err}
-        page = await self._new_text_page()
+        page = None
         try:
+            page = await self._new_text_page()
             await page.goto(url, wait_until=wait_until, timeout=self.config.page_timeout)
             items = await page.eval_on_selector_all(
                 "h1, h2, h3, h4, h5, h6",
@@ -220,7 +227,8 @@ class WebCore:
         except Exception as exc:
             return {"url": url, "error": str(exc)}
         finally:
-            await page.close()
+            if page:
+                await page.close()
 
     async def screenshot(self, url: str, full_page: bool = False) -> bytes:
         if err := self.validate_url(url):
@@ -269,6 +277,7 @@ class WebCore:
         return None
 
     async def _warmup_browser(self) -> None:
+        self._context = None
         if self._browser is not None:
             try:
                 await self._browser.close()
@@ -352,7 +361,7 @@ class WebCore:
         out: list[dict[str, Any]] = []
         for item in results:
             url = item.get("url", "")
-            if url and url in seen:
+            if not url or url in seen:
                 continue
             seen.add(url)
             out.append(item)

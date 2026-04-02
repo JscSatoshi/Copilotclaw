@@ -16,7 +16,7 @@ services:
     user: root
     entrypoint: >
       sh -c '
-        mkdir -p /root/.openclaw/canvas /root/.openclaw/cron /root/.openclaw/devices /root/.openclaw/agents /root/.openclaw/media/browser &&
+        mkdir -p /root/.openclaw/canvas /root/.openclaw/cron /root/.openclaw/devices /root/.openclaw/agents &&
         mkdir -p /data/workspace/skills /data/workspace/memory &&
         [ -f /root/.openclaw/openclaw.json ] || cp /tmp/openclaw.json.src /root/.openclaw/openclaw.json &&
         rm -f /root/.openclaw/agents/main/agent/models.json &&
@@ -30,7 +30,7 @@ services:
       - openclaw-data:/data
       - ./openclaw/openclaw.json:/tmp/openclaw.json.src:ro
       - ./openclaw/skills/web/SKILL.md:/data/workspace/skills/web/SKILL.md
-      - screenshot-media:/root/.openclaw/media/browser
+      - screenshot-media:/tmp/screenshots
     depends_on:
       skillserver:
         condition: service_started
