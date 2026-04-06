@@ -410,7 +410,7 @@ def _ensure_device_paired() -> None:
             _print_paired_summary()
             return
         remaining = max(0, int(deadline - time.time()))
-        info(f"等待配对中（剩余 {remaining}s）..."))
+        info(f"等待配对中（剩余 {remaining}s）...")
         time.sleep(5)
 
     if approved_total > 0:
