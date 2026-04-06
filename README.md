@@ -96,7 +96,7 @@ Agent 通过 **Skill**（注入系统提示的 Markdown）学会调用 `http://s
 ### openclaw（端口 18789，对外）
 - 镜像：`openclaw:local`（`node:22-bookworm-slim`，官方安装脚本写入）
 - **运行用户：root**（容器全程以 root 运行，无降权步骤）
-- 模型：`github-copilot/claude-sonnet-4.6`（在 `openclaw.json` 中修改）
+- 模型：`github-copilot/gpt-5.4`（默认值；可在 `openclaw.json` 中修改）
 - 内置 web 工具已禁用，改由 Skill + SkillServer 提供搜索/浏览能力
 - `openclaw.json` 采用「暂存 → 复制」挂载方式（挂载到 `/tmp/openclaw.json.src:ro`，启动时复制到 `/root/.openclaw/`），确保容器内配置文件可写
 - **Gateway Token** 通过环境变量 `OPENCLAW_GATEWAY_TOKEN` 注入（`--token` 参数），`openclaw.json` 中不存储 token
@@ -136,7 +136,7 @@ Agent 通过 **Skill**（注入系统提示的 Markdown）学会调用 `http://s
 
 **改模型**：编辑 `openclaw/openclaw.json` → `agents.defaults.model.primary`，然后 `--start` 重启生效。
 
-可用的 GitHub Copilot 模型示例：`github-copilot/claude-sonnet-4.6`、`github-copilot/gpt-5.4`、`github-copilot/gpt-4o`
+可用的 GitHub Copilot 模型示例：`github-copilot/gpt-5.4`、`github-copilot/gpt-5.2-codex`、`github-copilot/claude-sonnet-4.6`、`github-copilot/gpt-4o`
 
 **重建镜像**：`python3 deploy.py --build` 仅在镜像缺失时构建，`--build --force` 强制重建。首次构建含 Playwright Chromium，约需 3–5 分钟。
 
