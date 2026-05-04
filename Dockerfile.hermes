@@ -1,0 +1,48 @@
+FROM python:3.13-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+ENV HERMES_HOME=/opt/data
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      curl \
+      ffmpeg \
+      git \
+      gosu \
+      libffi-dev \
+      openssh-client \
+      ripgrep \
+      tini && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd -u 10000 -m -d /opt/data hermes
+
+WORKDIR /opt
+
+ARG HERMES_REF=v2026.4.30
+RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/hermes-agent.git /opt/hermes
+
+WORKDIR /opt/hermes
+
+RUN python -m venv /opt/hermes/.venv && \
+    /opt/hermes/.venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    /opt/hermes/.venv/bin/pip install --no-cache-dir -e ".[cli,pty,mcp,cron]" fastapi "uvicorn[standard]" && \
+    cd web && npm install --prefer-offline --no-audit && npm run build && \
+    npm cache clean --force && \
+    cd /opt/hermes && rm -rf .git node_modules web/node_modules /root/.cache /root/.npm && \
+    chmod -R a+rX /opt/hermes
+
+COPY docker/hermes-entrypoint.sh /usr/local/bin/hermes-entrypoint.sh
+RUN chmod +x /usr/local/bin/hermes-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/hermes-entrypoint.sh"]
+CMD ["hermes"]

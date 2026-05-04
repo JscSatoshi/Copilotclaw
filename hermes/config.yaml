@@ -1,0 +1,32 @@
+model:
+  provider: copilot
+  default: gpt-5.4
+
+terminal:
+  backend: local
+  cwd: /workspace
+  timeout: 300
+  lifetime_seconds: 900
+
+browser:
+  inactivity_timeout: 120
+
+skills:
+  creation_nudge_interval: 0
+  external_dirs:
+    - /workspace/hermes/skills
+
+agent:
+  max_turns: 80
+  reasoning_effort: medium
+  disabled_toolsets:
+    - web
+    - browser
+
+display:
+  compact: false
+  tool_progress: all
+  interim_assistant_messages: true
+  streaming: true
+
+timezone: Asia/Shanghai
