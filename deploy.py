@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import platform
@@ -24,6 +25,11 @@ HERMES_PORT = 9119
 HERMES_API_PORT = 8642
 OPEN_WEBUI_PORT = 3000
 HERMES_OK_CODES: Tuple[str, ...] = ("200", "204", "301", "302", "307", "308")
+HERMES_IMAGE = "hermes-agent:local"
+SKILLSERVER_IMAGE = "skillserver:local"
+SKILLSERVER_CERT_DIR = Path("skillserver/certs")
+SKILLSERVER_TLS_CONFIG = Path("skillserver/tls.cnf")
+SKILLSERVER_TLS_TARGET_DATE = dt.date(2999, 12, 31)
 
 
 def _c(code: str, text: str) -> str:
@@ -87,6 +93,151 @@ def ensure_docker() -> bool:
         return True
     fail("Docker 引擎未运行，请先启动 Docker Desktop")
     return False
+
+
+def _skillserver_tls_days_remaining() -> int:
+    today = dt.datetime.utcnow().date()
+    return max(1, (SKILLSERVER_TLS_TARGET_DATE - today).days)
+
+
+def _cert_end_year(openssl: str, cert_path: Path) -> Optional[int]:
+    result = subprocess.run(
+        [openssl, "x509", "-in", str(cert_path), "-noout", "-enddate"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode != 0:
+        return None
+    line = (result.stdout or "").strip()
+    if "=" not in line:
+        return None
+    try:
+        return int(line.rsplit(" ", 1)[-1])
+    except ValueError:
+        return None
+
+
+def ensure_skillserver_tls(root: Path) -> bool:
+    cert_dir = root / SKILLSERVER_CERT_DIR
+    tls_config = root / SKILLSERVER_TLS_CONFIG
+    ca_key = cert_dir / "skillserver-ca.key"
+    ca_cert = cert_dir / "skillserver-ca.crt"
+    server_key = cert_dir / "skillserver.key"
+    server_csr = cert_dir / "skillserver.csr"
+    server_cert = cert_dir / "skillserver.crt"
+    fullchain_cert = cert_dir / "skillserver.fullchain.crt"
+    serial_file = cert_dir / "skillserver-ca.srl"
+    required = [ca_key, ca_cert, server_key, server_cert, fullchain_cert]
+
+    openssl = shutil.which("openssl")
+    if not openssl:
+        fail("未找到 openssl，无法生成 SkillServer HTTPS 自签证书")
+        return False
+
+    current_server_end_year = _cert_end_year(openssl, server_cert) if server_cert.exists() else None
+    current_ca_end_year = _cert_end_year(openssl, ca_cert) if ca_cert.exists() else None
+
+    if (
+        all(path.exists() for path in required)
+        and current_server_end_year is not None
+        and current_server_end_year >= SKILLSERVER_TLS_TARGET_DATE.year
+        and current_ca_end_year is not None
+        and current_ca_end_year >= SKILLSERVER_TLS_TARGET_DATE.year
+    ):
+        ok("复用已有 SkillServer TLS 证书")
+        return True
+
+    if current_server_end_year or current_ca_end_year:
+        info(
+            "SkillServer TLS 证书有效期不足，将重签到 "
+            f"{SKILLSERVER_TLS_TARGET_DATE.isoformat()}"
+        )
+    if not tls_config.exists():
+        fail(f"缺少 TLS 配置文件: {tls_config}")
+        return False
+
+    cert_dir.mkdir(parents=True, exist_ok=True)
+    for path in [ca_key, ca_cert, server_key, server_csr, server_cert, fullchain_cert, serial_file]:
+        if path.exists():
+            path.unlink()
+
+    tls_days = str(_skillserver_tls_days_remaining())
+
+    commands = [
+        [
+            openssl,
+            "req",
+            "-x509",
+            "-new",
+            "-nodes",
+            "-sha256",
+            "-days",
+            tls_days,
+            "-keyout",
+            str(ca_key),
+            "-out",
+            str(ca_cert),
+            "-subj",
+            "/CN=Hermes SkillServer Local CA",
+            "-extensions",
+            "v3_ca",
+            "-config",
+            str(tls_config),
+        ],
+        [
+            openssl,
+            "req",
+            "-new",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            str(server_key),
+            "-out",
+            str(server_csr),
+            "-config",
+            str(tls_config),
+            "-reqexts",
+            "req_ext",
+        ],
+        [
+            openssl,
+            "x509",
+            "-req",
+            "-in",
+            str(server_csr),
+            "-CA",
+            str(ca_cert),
+            "-CAkey",
+            str(ca_key),
+            "-CAcreateserial",
+            "-out",
+            str(server_cert),
+            "-days",
+            tls_days,
+            "-sha256",
+            "-extfile",
+            str(tls_config),
+            "-extensions",
+            "req_ext",
+        ],
+    ]
+
+    for args in commands:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            fail("生成 SkillServer TLS 证书失败")
+            detail = (result.stderr or result.stdout or "").strip()
+            if detail:
+                print(detail)
+            return False
+
+    fullchain_cert.write_bytes(server_cert.read_bytes() + ca_cert.read_bytes())
+    ca_key.chmod(0o600)
+    server_key.chmod(0o600)
+    ok("已生成 SkillServer HTTPS 自签证书")
+    return True
 
 
 def http_json(method: str, url: str, data: Optional[dict] = None, headers: Optional[dict] = None) -> Dict:
@@ -164,8 +315,6 @@ def ensure_env_defaults(root: Path) -> None:
     write_env_var(root, "HERMES_GID", str(os.getgid()), "Docker 里 Hermes 进程使用的 GID")
     if not read_env_var(root, "HERMES_DASHBOARD_PORT"):
         write_env_var(root, "HERMES_DASHBOARD_PORT", str(HERMES_PORT), "Hermes Dashboard 本地端口")
-    if not read_env_var(root, "API_SERVER_ENABLED"):
-        write_env_var(root, "API_SERVER_ENABLED", "true", "Hermes OpenAI-compatible API server 开关")
     if not read_env_var(root, "API_SERVER_PORT"):
         write_env_var(root, "API_SERVER_PORT", str(HERMES_API_PORT), "Hermes OpenAI-compatible API server 端口")
     if not read_env_var(root, "OPEN_WEBUI_PORT"):
@@ -260,8 +409,8 @@ def build_images(root: Path, force: bool = False) -> bool:
     if result.returncode != 0:
         fail("镜像构建失败")
         return False
-    if not image_exists("hermes-agent:local") or not image_exists("skillserver:local"):
-        fail("镜像构建后未找到 hermes-agent:local 或 skillserver:local")
+    if not image_exists(HERMES_IMAGE) or not image_exists(SKILLSERVER_IMAGE):
+        fail(f"镜像构建后未找到 {HERMES_IMAGE} 或 {SKILLSERVER_IMAGE}")
         return False
     ok("镜像构建完成")
     return True
@@ -269,7 +418,7 @@ def build_images(root: Path, force: bool = False) -> bool:
 
 def start_stack(root: Path) -> bool:
     step(2, "启动 Hermes Stack")
-    command = f"cd {shell_quote(str(root))} && {compose_cmd()} up -d"
+    command = f"cd {shell_quote(str(root))} && {compose_cmd()} up -d --build"
     result = subprocess.run(command, shell=True)
     if result.returncode != 0:
         fail("容器启动失败")
@@ -337,7 +486,7 @@ def check_stack(root: Path) -> bool:
 
     step(4, "检查 SkillServer")
     out = run(
-        f"cd {shell_quote(str(root))} && {compose_cmd()} exec -T skillserver python -c \"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=5).read().decode())\"",
+        f"cd {shell_quote(str(root))} && {compose_cmd()} exec -T skillserver python -c \"import urllib.request; print(urllib.request.urlopen('https://127.0.0.1:3000/health', timeout=5).read().decode())\"",
         check=False,
         timeout=30,
     )
@@ -375,10 +524,12 @@ def deploy(root: Path, *, force_build: bool = False, refresh_token: bool = False
         return 1
 
     ensure_env_defaults(root)
+    if not ensure_skillserver_tls(root):
+        return 1
     if not ensure_github_token(root, force=refresh_token):
         return 1
 
-    if force_build or not image_exists("hermes-agent:local") or not image_exists("skillserver:local"):
+    if force_build or not image_exists(HERMES_IMAGE) or not image_exists(SKILLSERVER_IMAGE):
         if not build_images(root, force=force_build):
             return 1
     else:
@@ -422,6 +573,8 @@ def main() -> int:
         if not ensure_docker():
             return 1
         ensure_env_defaults(root)
+        if not ensure_skillserver_tls(root):
+            return 1
         return 0 if build_images(root, force=args.force) else 1
     if args.newtoken and not args.start:
         ensure_env_defaults(root)
@@ -430,6 +583,8 @@ def main() -> int:
         if not ensure_docker():
             return 1
         ensure_env_defaults(root)
+        if not ensure_skillserver_tls(root):
+            return 1
         if args.newtoken and not ensure_github_token(root, force=True):
             return 1
         if args.build or args.force:

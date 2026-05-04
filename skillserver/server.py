@@ -19,8 +19,15 @@ from web_core import WebCore
 HOST              = os.environ.get("HOST", "0.0.0.0")
 PORT              = int(os.environ.get("PORT", "3000"))
 MEDIA_DIR         = os.environ.get("MEDIA_DIR", "/tmp/screenshots")
+SSL_CERTFILE      = os.environ.get("SSL_CERTFILE")
+SSL_KEYFILE       = os.environ.get("SSL_KEYFILE")
 
 core = WebCore()
+
+
+def _error_message(exc: Exception) -> str:
+    message = str(exc).strip()
+    return message or f"{type(exc).__name__}"
 
 
 @asynccontextmanager
@@ -64,7 +71,7 @@ async def search(
             max_results=max_results,
         )
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=502)
+        return JSONResponse({"error": _error_message(e)}, status_code=502)
 
 
 @app.get("/deep_search")
@@ -87,7 +94,7 @@ async def deep_search(
     except asyncio.TimeoutError:
         return JSONResponse({"error": "deep_search timed out"}, status_code=504)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=502)
+        return JSONResponse({"error": _error_message(e)}, status_code=502)
 
 
 @app.get("/navigate")
@@ -160,4 +167,10 @@ async def screenshot(url: str, full_page: bool = False):
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    uvicorn.run(app, host=HOST, port=PORT)
+    ssl_kwargs = {}
+    if SSL_CERTFILE and SSL_KEYFILE:
+        ssl_kwargs = {
+            "ssl_certfile": SSL_CERTFILE,
+            "ssl_keyfile": SSL_KEYFILE,
+        }
+    uvicorn.run(app, host=HOST, port=PORT, **ssl_kwargs)

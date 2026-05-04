@@ -18,7 +18,7 @@ from playwright.async_api import Browser, BrowserContext, Playwright, async_play
 @dataclass
 class CoreConfig:
     searxng_url: str = os.environ.get("SEARXNG_URL", "http://searxng:8080").rstrip("/")
-    searxng_timeout: float = float(os.environ.get("SEARXNG_TIMEOUT", "15"))
+    searxng_timeout: float = float(os.environ.get("SEARXNG_TIMEOUT", "30"))
     page_timeout: int = int(os.environ.get("PAGE_TIMEOUT", "30000"))
     fetch_concurrency: int = int(os.environ.get("FETCH_CONCURRENCY", "3"))
     allow_private_network: bool = os.environ.get("ALLOW_PRIVATE_NETWORK", "false").lower() == "true"
@@ -341,9 +341,24 @@ class WebCore:
 
     async def _searxng_query(self, params: dict[str, Any]) -> dict[str, Any]:
         params.setdefault("format", "json")
-        resp = await self._get_http_client().get("/search", params=params)
-        resp.raise_for_status()
-        return resp.json()
+        last_error: Exception | None = None
+        for attempt in range(2):
+            try:
+                resp = await self._get_http_client().get("/search", params=params)
+                resp.raise_for_status()
+                return resp.json()
+            except httpx.ReadTimeout as exc:
+                last_error = exc
+                if self._http_client and not self._http_client.is_closed:
+                    await self._http_client.aclose()
+                self._http_client = None
+                if attempt == 1:
+                    break
+        if last_error is not None:
+            raise RuntimeError(
+                f"SearXNG timed out after {self.config.searxng_timeout:.0f}s while querying {params.get('q', '')!r}"
+            ) from last_error
+        raise RuntimeError("SearXNG query failed unexpectedly")
 
     async def _searxng_query_with_retry(self, params: dict[str, Any], category: str = "general") -> dict[str, Any]:
         data = await self._searxng_query(params)

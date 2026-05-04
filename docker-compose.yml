@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.hermes
+    pull_policy: never
     image: hermes-agent:local
     container_name: hermes
     environment:
@@ -11,7 +12,6 @@ services:
       HERMES_UID: ${HERMES_UID:-1000}
       HERMES_GID: ${HERMES_GID:-1000}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
-      API_SERVER_ENABLED: ${API_SERVER_ENABLED:-true}
       API_SERVER_HOST: 0.0.0.0
       API_SERVER_PORT: ${API_SERVER_PORT:-8642}
       API_SERVER_KEY: ${API_SERVER_KEY}
@@ -27,7 +27,7 @@ services:
       - screenshot-media:/tmp/screenshots
     depends_on:
       skillserver:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${API_SERVER_PORT:-8642}/health >/dev/null || exit 1"]
@@ -39,6 +39,7 @@ services:
       - ai-bridge
 
   dashboard:
+    pull_policy: never
     image: hermes-agent:local
     container_name: hermes-dashboard
     environment:
@@ -74,6 +75,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.openwebui
+    pull_policy: never
     image: open-webui:local
     container_name: open-webui
     ports:
@@ -100,6 +102,7 @@ services:
     build:
       context: ./skillserver
       dockerfile: Dockerfile.skillserver
+    pull_policy: never
     image: skillserver:local
     container_name: skillserver
     expose:
@@ -108,8 +111,10 @@ services:
       - TZ=${TZ:-Asia/Shanghai}
       - HOST=0.0.0.0
       - PORT=3000
+      - SSL_CERTFILE=/app/certs/skillserver.fullchain.crt
+      - SSL_KEYFILE=/app/certs/skillserver.key
       - SEARXNG_URL=http://searxng:8080
-      - SEARXNG_TIMEOUT=15
+      - SEARXNG_TIMEOUT=30
       - PAGE_TIMEOUT=30000
       - FETCH_CONCURRENCY=3
     volumes:
@@ -120,6 +125,12 @@ services:
     depends_on:
       - searxng
     restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('https://127.0.0.1:3000/health', timeout=5).status)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 5
     networks:
       - ai-bridge
 
@@ -133,6 +144,8 @@ services:
       - SEARXNG_SECRET=${SEARXNG_SECRET}
     volumes:
       - /etc/localtime:/etc/localtime:ro
+      - searxng-config:/etc/searxng
+      - searxng-cache:/var/cache/searxng
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
     restart: always
     networks:
@@ -145,4 +158,6 @@ networks:
 volumes:
   hermes-home:
   open-webui:
+  searxng-cache:
+  searxng-config:
   screenshot-media:

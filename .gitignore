@@ -11,3 +11,9 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# Generated local TLS assets
+skillserver/certs/*.crt
+skillserver/certs/*.csr
+skillserver/certs/*.key
+skillserver/certs/*.srl

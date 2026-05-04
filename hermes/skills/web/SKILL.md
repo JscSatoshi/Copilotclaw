@@ -1,6 +1,6 @@
 ---
 name: web
-description: "Use this skill for all web access in this stack. Native web/browser toolsets are intentionally disabled, so use terminal commands with curl against http://skillserver:3000/."
+description: "Use this skill for all web access in this stack. Native web/browser toolsets are intentionally disabled, so use terminal commands with curl against https://skillserver:3000/."
 triggers:
 - web
 - browser
@@ -18,7 +18,7 @@ triggers:
 
 这个仓库的 Hermes 配置故意禁用了内建 `web` 和 `browser` toolset，统一走本地 `skillserver`。
 
-唯一可用的 Web 访问路径：在终端里调用 `curl http://skillserver:3000/...`。
+唯一可用的 Web 访问路径：在终端里调用 `curl https://skillserver:3000/...`。
 
 基础规则：
 
@@ -30,25 +30,25 @@ triggers:
 ## Search
 
 ```bash
-curl -s --max-time 15 "http://skillserver:3000/search?q=YOUR+QUERY" | head -c 8000
+curl -s --max-time 15 "https://skillserver:3000/search?q=YOUR+QUERY" | head -c 8000
 ```
 
 ## Deep Search
 
 ```bash
-curl -s --max-time 60 "http://skillserver:3000/deep_search?q=YOUR+QUERY&max_results=3" | head -c 16000
+curl -s --max-time 60 "https://skillserver:3000/deep_search?q=YOUR+QUERY&max_results=3" | head -c 16000
 ```
 
 ## Navigate
 
 ```bash
-curl -s --max-time 30 "http://skillserver:3000/navigate?url=https%3A%2F%2Fexample.com" | head -c 12000
+curl -s --max-time 30 "https://skillserver:3000/navigate?url=https%3A%2F%2Fexample.com" | head -c 12000
 ```
 
 ## Screenshot
 
 ```bash
-curl -s --max-time 30 "http://skillserver:3000/screenshot?url=https%3A%2F%2Fexample.com&full_page=false"
+curl -s --max-time 30 "https://skillserver:3000/screenshot?url=https%3A%2F%2Fexample.com&full_page=false"
 ```
 
 返回示例：
@@ -63,5 +63,5 @@ curl -s --max-time 30 "http://skillserver:3000/screenshot?url=https%3A%2F%2Fexam
 
 ```bash
 Q=$(node -e "process.stdout.write(encodeURIComponent('贵州茅台 股价 今日'))")
-curl -s --max-time 15 "http://skillserver:3000/search?q=${Q}&language=zh-CN" | head -c 8000
+curl -s --max-time 15 "https://skillserver:3000/search?q=${Q}&language=zh-CN" | head -c 8000
 ```
